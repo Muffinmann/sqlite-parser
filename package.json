@@ -1,0 +1,28 @@
+{
+  "name": "sqlite-parser",
+  "version": "0.0.1",
+  "description": "sqlite query string to AST",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Muffinmann/sqlite-parser.git"
+  },
+  "keywords": [
+    "sqlite",
+    "parser",
+    "SQL",
+    "AST"
+  ],
+  "author": "Muffinmann",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/Muffinmann/sqlite-parser/issues"
+  },
+  "homepage": "https://github.com/Muffinmann/sqlite-parser#readme",
+  "dependencies": {
+    "typescript": "^5.4.5"
+  }
+}
