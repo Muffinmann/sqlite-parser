@@ -1,163 +1,10 @@
-enum KEY_WORDS {
-  ABORT = 'abort',
-  ACTION = 'action',
-  ADD = 'add',
-  AFTER = 'after',
-  ALL = 'all',
-  ALTER = 'alter',
-  ALWAYS = 'always',
-  ANALYZE = 'analyze',
-  AND = 'and',
-  AS = 'as',
-  ASC = 'asc',
-  ATTACH = 'attach',
-  AUTOINCREMENT = 'autoincrement',
-  BEFORE = 'before',
-  BEGIN = 'begin',
-  BETWEEN = 'between',
-  BY = 'by',
-  CASCADE = 'cascade',
-  CASE = 'case',
-  CAST = 'cast',
-  CHECK = 'check',
-  COLLATE = 'collate',
-  COLUMN = 'column',
-  COMMIT = 'commit',
-  CONFLICT = 'conflict',
-  CONSTRAINT = 'constraint',
-  CREATE = 'create',
-  CROSS = 'cross',
-  CURRENT = 'current',
-  CURRENT_DATE = 'current_date',
-  CURRENT_TIME = 'current_time',
-  CURRENT_TIMESTAMP = 'current_timestamp',
-  DATABASE = 'database',
-  DEFAULT = 'default',
-  DEFERRABLE = 'deferrable',
-  DEFERRED = 'deferred',
-  DELETE = 'delete',
-  DESC = 'desc',
-  DETACH = 'detach',
-  DISTINCT = 'distinct',
-  DO = 'do',
-  DROP = 'drop',
-  EACH = 'each',
-  ELSE = 'else',
-  END = 'end',
-  ESCAPE = 'escape',
-  EXCEPT = 'except',
-  EXCLUDE = 'exclude',
-  EXCLUSIVE = 'exclusive',
-  EXISTS = 'exists',
-  EXPLAIN = 'explain',
-  FAIL = 'fail',
-  FILTER = 'filter',
-  FIRST = 'first',
-  FOLLOWING = 'following',
-  FOR = 'for',
-  FOREIGN = 'foreign',
-  FROM = 'from',
-  FULL = 'full',
-  GENERATED = 'generated',
-  GLOB = 'glob',
-  GROUP = 'group',
-  GROUPS = 'groups',
-  HAVING = 'having',
-  IF = 'if',
-  IGNORE = 'ignore',
-  IMMEDIATE = 'immediate',
-  IN = 'in',
-  INDEX = 'index',
-  INDEXED = 'indexed',
-  INITIALLY = 'initially',
-  INNER = 'inner',
-  INSERT = 'insert',
-  INSTEAD = 'instead',
-  INTERSECT = 'intersect',
-  INTO = 'into',
-  IS = 'is',
-  ISNULL = 'isnull',
-  JOIN = 'join',
-  KEY = 'key',
-  LAST = 'last',
-  LEFT = 'left',
-  LIKE = 'like',
-  LIMIT = 'limit',
-  MATCH = 'match',
-  MATERIALIZED = 'materialized',
-  NATURAL = 'natural',
-  NO = 'no',
-  NOT = 'not',
-  NOTHING = 'nothing',
-  NOTNULL = 'notnull',
-  NULL = 'null',
-  NULLS = 'nulls',
-  OF = 'of',
-  OFFSET = 'offset',
-  ON = 'on',
-  OR = 'or',
-  ORDER = 'order',
-  OTHERS = 'others',
-  OUTER = 'outer',
-  OVER = 'over',
-  PARTITION = 'partition',
-  PLAN = 'plan',
-  PRAGMA = 'pragma',
-  PRECEDING = 'preceding',
-  PRIMARY = 'primary',
-  QUERY = 'query',
-  RAISE = 'raise',
-  RANGE = 'range',
-  RECURSIVE = 'recursive',
-  REFERENCES = 'references',
-  REGEXP = 'regexp',
-  REINDEX = 'reindex',
-  RELEASE = 'release',
-  RENAME = 'rename',
-  REPLACE = 'replace',
-  RESTRICT = 'restrict',
-  RETURNING = 'returning',
-  RIGHT = 'right',
-  ROLLBACK = 'rollback',
-  ROW = 'row',
-  ROWS = 'rows',
-  SAVEPOINT = 'savepoint',
-  SELECT = 'select',
-  SET = 'set',
-  TABLE = 'table',
-  TEMP = 'temp',
-  TEMPORARY = 'temporary',
-  THEN = 'then',
-  TIES = 'ties',
-  TO = 'to',
-  TRANSACTION = 'transaction',
-  TRIGGER = 'trigger',
-  UNBOUNDED = 'unbounded',
-  UNION = 'union',
-  UNIQUE = 'unique',
-  UPDATE = 'update',
-  USING = 'using',
-  VACUUM = 'vacuum',
-  VALUES = 'values',
-  VIEW = 'view',
-  VIRTUAL = 'virtual',
-  WHEN = 'when',
-  WHERE = 'where',
-  WINDOW = 'window',
-  WITH = 'with',
-  WITHOUT = 'without'
-}
-
-enum METHODS {
-  CREATE = 'create'
-}
-
+import { KEY_WORDS, METHODS } from "./const.js"
 
 const createWordToken = (w: string) => {
-  if (w in KEY_WORDS) {
+  if (w.toLocaleUpperCase() in KEY_WORDS) {
     return {
       type: 'keyword',
-      value: w
+      value: w.toLocaleUpperCase()
     }
   }
   if (w in METHODS) {
@@ -178,12 +25,13 @@ const LETTER = /[a-z]/i
 const DIGIT = /[0-9]/
 const WORD = /\w+/i
 const PARENTHESES = /[()]/
-const EQUAL = /=/
-const PUNCTUATION = /[,.'";]/
+const OPERATOR = /=/
+const PUNCTUATION = /[,.;]/
+const SINGLE_QUOTE = /'/
 
 const tokenize = (text: string) => {
   let ptr = 0;
-  const tokens: {}[] = []
+  const tokens: {type: string, value: string}[] = []
   let char = text[ptr]
   const forward = () => {
     char = text[++ptr]
@@ -219,7 +67,26 @@ const tokenize = (text: string) => {
       continue
     }
 
-    if (EQUAL.test(char)) {
+    if (SINGLE_QUOTE.test(char)) {
+      console.log('Start parsing quote', char)
+      forward()
+      let literal = ''
+      while(!SINGLE_QUOTE.test(char)) {
+        if (ptr > text.length) {
+          throw new Error('No closing quote matched')
+        }
+        literal += char
+        forward()
+      }
+      tokens.push({
+        type: 'literal',
+        value: literal,
+      })
+      forward() // skip the quote
+      continue
+    }
+
+    if (OPERATOR.test(char)) {
       tokens.push({
         type: 'operator',
         value: char

@@ -2,7 +2,8 @@
   "name": "sqlite-parser",
   "version": "0.0.1",
   "description": "sqlite query string to AST",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
