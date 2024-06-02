@@ -1,4 +1,4 @@
-import parse, { createResultColumnNode, createSerialTokenParser, makeReusable, tokenIs, trackAndParse } from "./parser.js";
+import parse, { createResultColumnNode, createSerialTokenParser, makeGroup, makeReusable, tokenIs, trackAndParse } from "./parser.js";
 import tokenize from "./tokenizer.js"
 
 const testQuery = `
@@ -38,7 +38,7 @@ const p = createSerialTokenParser(
   ], (([v1, , v3]) => ({ v1, v3 }))
 )
 
-const trigger = { new: false }
+const trigger = { new: 0 } // TODO (t: Token) => boolean
 const reusableP = makeReusable(createSerialTokenParser, trigger)(
   [
     tokenIs('identifier'),
@@ -64,11 +64,47 @@ console.log("reusable")
 console.log(reusableP({ type: 'identifier', value: 'table1' }))
 console.log(reusableP({ type: 'punctuation', value: '.' }))
 console.log(reusableP({ type: 'wildcard', value: '*' }))
-console.log(p({ type: 'keyword', value: 'FROM' }))
-console.log(p({ type: 'keyword', value: 'FROM' }))
-trigger.new = true
+console.log(reusableP({ type: 'keyword', value: 'FROM' }))
+console.log(reusableP({ type: 'keyword', value: 'FROM' }))
+trigger.new++
 console.log(reusableP({ type: 'identifier', value: 'table1' }))
 console.log(reusableP({ type: 'punctuation', value: '.' }))
 console.log(reusableP({ type: 'wildcard', value: '*' }))
-console.log(p({ type: 'keyword', value: 'FROM' }))
-console.log(p({ type: 'keyword', value: 'FROM' }))
+console.log(reusableP({ type: 'keyword', value: 'FROM' }))
+console.log(reusableP({ type: 'keyword', value: 'FROM' }))
+
+const groupParser = makeGroup([
+  createSerialTokenParser([tokenIs('identifier')], ([v1]) => ({ v1 })),
+  createSerialTokenParser([tokenIs('identifier'), tokenIs('keyword', 'AS'), tokenIs('identifier')], ([v1, , v3]) => ({ v1, v3 })),
+  createSerialTokenParser([tokenIs('identifier'), tokenIs('identifier')], ([v1, v2]) => ({ v1, v2 })),
+])
+console.log('group parser')
+console.log(groupParser({ type: 'identifier', value: 'table1' }))
+console.log(groupParser({ type: 'keyword', value: 'AS' }))
+console.log(groupParser({ type: 'identifier', value: 't1' }))
+console.log(groupParser({ type: 'identifier', value: 'table1' }))
+console.log(groupParser({ type: 'keyword', value: 'AS' }))
+console.log(groupParser({ type: 'identifier', value: 't1' }))
+console.log(groupParser({ type: 'keyword', value: 'FROM' }))
+console.log(groupParser({ type: 'keyword', value: 'FROM' }))
+
+
+const resetTrigger = { new: 0 }
+const reusableParser = makeReusable(createSerialTokenParser, resetTrigger)
+const reusableGroupParser = makeGroup([
+  reusableParser([tokenIs('identifier')], ([v1]) => ({ v1 })),
+  reusableParser([tokenIs('identifier'), tokenIs('keyword', 'AS'), tokenIs('identifier')], ([v1, , v3]) => ({ v1, v3 })),
+  reusableParser([tokenIs('identifier'), tokenIs('identifier')], ([v1, v2]) => ({ v1, v2 })),
+])
+
+console.log('reusable group parser')
+console.log(reusableGroupParser({ type: 'identifier', value: 'table1' }))
+console.log(reusableGroupParser({ type: 'keyword', value: 'AS' }))
+console.log(reusableGroupParser({ type: 'identifier', value: 't1' }))
+resetTrigger.new++
+console.log(reusableGroupParser({ type: 'identifier', value: 'table1' }))
+console.log(reusableGroupParser({ type: 'keyword', value: 'AS' }))
+console.log(reusableGroupParser({ type: 'identifier', value: 't1' }))
+console.log(reusableGroupParser({ type: 'keyword', value: 'FROM' }))
+console.log(reusableGroupParser({ type: 'keyword', value: 'FROM' }))
+

@@ -35,62 +35,58 @@ export const tokenIs = (type: string, value?: string) => (t: Token) => {
   }
   return t.value
 }
-type SerialTokenParser = (t: Token) => { finished: boolean, value: undefined | false | {} }
+
+type SerialTokenParser = (t: Token) => { matched: boolean, value: undefined | {} }
+
+// Tries to match pre-defined criteria by calling the returned parse function.
+// The final callback gets called when the whole criteria array is matched. 
+// Always returns unmatched when the calls of the parse function exceed the criteria length.
 export const createSerialTokenParser = (
   criteria: Array<(t: Token) => string | boolean>,
   final: ((res: (string | boolean)[]) => {}),
 ): SerialTokenParser => {
   let ptr = 0
   const checkResult: (string | boolean)[] = []
-  let finished = false
+  let lastMatched: boolean
   return (t: Token) => {
-    if (ptr > criteria.length - 1) {
-      if (finished) {
-        return { finished, value: false }
-      }
-      throw new Error("Pointer out of range")
+    if (ptr > criteria.length - 1 || (lastMatched === false)) {
+      return { matched: false, value: undefined }
     }
 
     try {
       const currentResult = criteria[ptr](t)
 
       if (!currentResult) {
-        finished = true
-        return { finished, value: false }
+        lastMatched = false
+        return { matched: false, value: undefined }
       }
 
       checkResult.push(currentResult)
 
       if (ptr === criteria.length - 1) {
-        if (!checkResult.every(Boolean)) {
-          finished = true
-          return {
-            finished: true, value: false
-          }
-        }
         const finalValue = typeof final === 'function' ? final(checkResult) : final
-        finished = true
         return {
-          finished: true,
+          matched: true,
           value: finalValue
         }
       }
 
-      return { finished: false, value: undefined }
+      return { matched: true, value: ptr }
     } finally {
       ptr++
     }
   }
 }
 
-export const makeReusable = (parserCreator: typeof createSerialTokenParser, trigger: { new: boolean }) => new Proxy(parserCreator, {
+export const makeReusable = (parserCreator: typeof createSerialTokenParser, trigger: { new: number }) => new Proxy(parserCreator, {
   apply(target, thisArg, args) {
     const create = () => Reflect.apply(target, thisArg, args)
     const parser = { current: create() }
+    let lastTrigger: number
     return (t: Token) => {
-      if (trigger.new) {
+      if (trigger.new !== lastTrigger) {
         parser.current = create()
-        trigger.new = false
+        lastTrigger = trigger.new
       }
       const res = parser.current(t)
       return res
@@ -126,28 +122,25 @@ const makeRepeatable = (
   }
 }
 
-const makeGroup = (parsers: Array<SerialTokenParser>) => {
-  const length = parsers.length
-  let failCount = 0
+export const makeGroup = (parsers: Array<SerialTokenParser>) => {
   return (t: Token) => {
+    let successResult
     for (let i = 0; i < parsers.length; ++i) {
       const parser = parsers[i]
-      const tempResult = parser(t)
-      if (tempResult.finished) {
-        if (tempResult.value === false) {
-          failCount++
-        } else {
-          return tempResult
-        }
+      const currentResult = parser(t)
+      if (currentResult.matched && successResult === undefined) {
+        successResult = currentResult
       }
-
     }
 
-    if (failCount === length) {
-      return { finished: true, value: false }
+    if (successResult) {
+      return successResult
     }
 
-    return { finished: false, value: undefined }
+    return {
+      matched: false, value: undefined
+    }
+
   }
 }
 
