@@ -78,6 +78,24 @@ export const createSerialTokenParser = (
   }
 }
 
+const createRecursiveParser = (prevCriteria, currentCriteria, final) => {
+  const recursiveParse = (prev) => {
+    if (prev.matched) {
+      return recursiveParse(currentCriteria)
+    }
+    if (recursiveCriteria()) {
+      return recursiveParse()
+    }
+  }
+  return (t: Token) => {
+
+  }
+}
+
+const p = createRecursiveParser(
+  // base criteria
+  // recursive criteria
+)
 export const makeReusable = (parserCreator: typeof createSerialTokenParser, trigger: { new: number }) => new Proxy(parserCreator, {
   apply(target, thisArg, args) {
     const create = () => Reflect.apply(target, thisArg, args)
@@ -161,7 +179,7 @@ const createResultColumnParser = (onNodeParsed: (node: {}) => void) => {
   let result: {} | undefined
   let lastMatched = false
   return (t: Token) => {
-    if (tokenIs('punctuation', ',')) {
+    if (tokenIs('punctuation', ',')(t)) {
       trigger.new++
       if (result) {
         onNodeParsed(result)
@@ -182,7 +200,18 @@ const createResultColumnParser = (onNodeParsed: (node: {}) => void) => {
 }
 
 const createFromParser = (onNodeParsed: (n: {}) => void) => {
-  return (t: Token) => { }
+  let start = false
+  return (t: Token) => {
+    if (!start) {
+      if (tokenIs('keyword', 'FROM')(t)) {
+        start = true
+        return { matched: true, value: 'FROM' }
+      }
+      return { matched: false, value: undefined }
+    }
+    // parsing token
+
+  }
 }
 
 const parse = (tokens: Token[]) => {
