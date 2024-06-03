@@ -43,7 +43,7 @@ type SerialTokenParser = (t: Token) => { matched: boolean, value: undefined | {}
 // Always returns unmatched when the calls of the parse function exceed the criteria length.
 export const createSerialTokenParser = (
   criteria: Array<(t: Token) => string | boolean>,
-  final: ((res: (string | boolean)[]) => {}),
+  final: {} | ((res: (string | boolean)[]) => {}),
 ): SerialTokenParser => {
   let ptr = 0
   const checkResult: (string | boolean)[] = []
@@ -143,73 +143,49 @@ export const makeGroup = (parsers: Array<SerialTokenParser>) => {
 
   }
 }
-
-// const groupParser = makeGroup([
-//   createSerialTokenParser([tokenIs('identifier')], ([v1]) => createResultColumnNode(v1)),
-//   createSerialTokenParser([tokenIs('identifier'), tokenIs('keyword', 'AS'), tokenIs('identifier')], ([v1, , v3]) => createResultColumnNode(v1, v3)),
-//   createSerialTokenParser([tokenIs('identifier'), tokenIs('identifier')], ([v1, v2]) => createResultColumnNode(v1, v2)),
-// ])
-
-// // const p = trackAndParse([
-// //         [tokenIs('identifier'), ([v1]: any) => createResultColumnNode(v1)],
-// //         [tokenIs('identifier'), tokenIs('keyword', 'AS'), tokenIs('identifier'), ([v1, , v3]: any) => createResultColumnNode(v1, v3)],
-// //         [tokenIs('identifier'), tokenIs('identifier'), ([v1, v2]: any) => createResultColumnNode(v1, v2)],
-// //         [tokenIs('wildcard', '*'), createResultColumnNode("*")],
-// //         [tokenIs('identifier'), tokenIs('punctuation', '.'), tokenIs('identifier'), ([v1, , v3]: any) => createResultColumnNode(v3, null, v1)]
-// //       ], {
-// //         repeat: tokenIs('punctuation', ','),
-// //         finish: tokenIs('keyword', 'FROM'),
-// //         onNodeParsed: (n) => { selectNode.columns.push(node) }
-// //       })
-// const parseResultColumn = makeRepeatable(
-//   () => { },
-//   {
-//     repeat: tokenIs('punctuation', ','),
-//     finish: tokenIs('keyword', 'FROM')
-//   }
-// )
-export const trackAndParse = (
-  tracks: [...Function[], ((args: (string | boolean)[]) => object) | object][],
-  options: { repeat: () => boolean, finish: () => boolean, onNodeParsed: (n: any) => void }
-) => {
-  let ptr = 0
-  const lengths = tracks.map(track => track.length)
-  const maxLength = Math.max(...lengths)
-  const trackResult = Array.from({ length: tracks.length }, () => []) as (string | boolean)[][]
-
+// result-column has three variants:
+// 1. expr [[as] column-alias]
+// 2. *
+// 3. table-name.*
+// here the expr part is simplified.
+const createResultColumnParser = (onNodeParsed: (node: {}) => void) => {
+  const trigger = { new: 0 }
+  const createParser = makeReusable(createSerialTokenParser, trigger)
+  const parseResultColumn = makeGroup([
+    createParser([tokenIs('identifier')], ([v1]: any) => createResultColumnNode(v1)),
+    createParser([tokenIs('identifier'), tokenIs('keyword', 'AS'), tokenIs('identifier')], ([v1, , v3]: any) => createResultColumnNode(v1, v3)),
+    createParser([tokenIs('identifier'), tokenIs('identifier')], ([v1, v2]: any) => createResultColumnNode(v1, v2)),
+    createParser([tokenIs('wildcard', '*')], createResultColumnNode("*")),
+    createParser([tokenIs('identifier'), tokenIs('punctuation', '.'), tokenIs('identifier')], ([v1, , v3]: any) => createResultColumnNode(v3, null, v1))
+  ])
+  let result: {} | undefined
+  let lastMatched = false
   return (t: Token) => {
-    for (let i = 0; i < tracks.length; ++i) {
-      const track = tracks[i]
-
-      if (ptr < track.length - 1) {
-        const checkToken = track[ptr] as Function
-        trackResult[i].push(checkToken(t))
+    if (tokenIs('punctuation', ',')) {
+      trigger.new++
+      if (result) {
+        onNodeParsed(result)
+        // reset flags
+        result = undefined
+        lastMatched = false
       }
-      if (ptr === track.length - 2) {
-        const parsedNode = track[ptr + 1]
-        if (trackResult[i].every(Boolean)) {
-          return {
-            finished: true,
-            value: typeof parsedNode === 'function' ? parsedNode(trackResult[i]) : parsedNode
-          }
-        }
-      }
-
     }
-
-    ptr++
-    if (ptr < maxLength - 1) {
-      return { finished: false, trackResult }
+    const res = parseResultColumn(t)
+    if (res.matched) {
+      result = res.value
+      lastMatched = true
+    } else if (lastMatched && result) {
+      onNodeParsed(result)
     }
-    throw new Error("No track matched")
+    return res
   }
-
-
 }
 
+const createFromParser = (onNodeParsed: (n: {}) => void) => {
+  return (t: Token) => { }
+}
 
-
-const parseToken = (tokens: Token[]) => {
+const parse = (tokens: Token[]) => {
   let ptr = 0
   let ast = {
     type: 'program',
@@ -236,43 +212,16 @@ const parseToken = (tokens: Token[]) => {
     };
 
     let token = tokens[ptr]
-    while (!currentTokenIs('keyword', 'FROM')) {
-      if (currentTokenIs('keyword', 'DISTINCT')) {
-        selectNode.distinct = true
-        ptr++
-        continue
-      }
-      if (currentTokenIs('punctuation', ',')) {
-        ptr++
-        continue
-      }
+    const parseResultColumn = createResultColumnParser((n) => { selectNode.columns.push(n) })
+    const parseFrom = createFromParser((n) => { selectNode.from = n })
 
+    if (currentTokenIs('keyword', 'DISTINCT')) {
+      selectNode.distinct = true
+      ptr++
+    }
 
-      // result-column has three variants:
-      // 1. expr [[as] column-alias]
-      // 2. *
-      // 3. table-name.*
-      // const p = trackAndParse([
-      //   [tokenIs('identifier'), ([v1]: any) => createResultColumnNode(v1)],
-      //   [tokenIs('identifier'), tokenIs('keyword', 'AS'), tokenIs('identifier'), ([v1, , v3]: any) => createResultColumnNode(v1, v3)],
-      //   [tokenIs('identifier'), tokenIs('identifier'), ([v1, v2]: any) => createResultColumnNode(v1, v2)],
-      //   [tokenIs('wildcard', '*'), createResultColumnNode("*")],
-      //   [tokenIs('identifier'), tokenIs('punctuation', '.'), tokenIs('identifier'), ([v1, , v3]: any) => createResultColumnNode(v3, null, v1)]
-      // ], {
-      //   repeat: tokenIs('punctuation', ','),
-      //   finish: tokenIs('keyword', 'FROM'),
-      //   onNodeParsed: (n) => { selectNode.columns.push(node) }
-      // })
-      // while (!currentTokenIs('punctuation', ',')) {
-      //   const res = p(token)
-      //   if (res.finished) {
-      //     selectNode.columns.push(res.value)
-      //   }
-      //   token = tokens[ptr++]
-      // }
-      // while (!p(token).finished) {
-      //   token = tokens[++ptr]
-      // }
+    while (parseResultColumn(token).matched) {
+      token = tokens[++ptr]
     }
 
     if (currentTokenIs('keyword', 'FROM')) {
@@ -308,4 +257,4 @@ const parseToken = (tokens: Token[]) => {
 }
 
 
-export default parseToken;
+export default parse;

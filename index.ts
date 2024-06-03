@@ -1,4 +1,4 @@
-import parse, { createResultColumnNode, createSerialTokenParser, makeGroup, makeReusable, tokenIs, trackAndParse } from "./parser.js";
+import parse, { createResultColumnNode, createSerialTokenParser, makeGroup, makeReusable, tokenIs } from "./parser.js";
 import tokenize from "./tokenizer.js"
 
 const testQuery = `
