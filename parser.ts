@@ -78,24 +78,21 @@ export const createSerialTokenParser = (
   }
 }
 
-const createRecursiveParser = (prevCriteria, currentCriteria, final) => {
-  const recursiveParse = (prev) => {
-    if (prev.matched) {
-      return recursiveParse(currentCriteria)
-    }
-    if (recursiveCriteria()) {
-      return recursiveParse()
-    }
+const tokenIsExpr = (prev: Token) => (t: Token) => {
+  if (tokenIs('literal')(t)) {
+    return {matched: true, value: t.value}
   }
-  return (t: Token) => {
+  if (tokenIs('operator', '=')) {
 
   }
+  return tokenIsExpr(t) 
 }
 
-const p = createRecursiveParser(
-  // base criteria
-  // recursive criteria
-)
+
+// const p = createRecursiveParser(
+//   [tokenIsExpr, tokenIs('keyword', 'COLLATE'), tokenIs('identifier')],
+//   // final
+// )
 export const makeReusable = (parserCreator: typeof createSerialTokenParser, trigger: { new: number }) => new Proxy(parserCreator, {
   apply(target, thisArg, args) {
     const create = () => Reflect.apply(target, thisArg, args)
@@ -161,6 +158,65 @@ export const makeGroup = (parsers: Array<SerialTokenParser>) => {
 
   }
 }
+
+// const createRecursiveParser = (prevCriteria, currentCriteria, final) => {
+//   const recursiveParse = (prev) => {
+//     if (prev.matched) {
+//       return recursiveParse(currentCriteria)
+//     }
+//     if (recursiveCriteria()) {
+//       return recursiveParse()
+//     }
+//   }
+//   return (t: Token) => {
+
+//   }
+// }
+
+// -> literal-value ->
+// -> column-name ->
+// -> table-name -> . -> column-name ->
+// -> expr -> binary-operator -> expr ->
+//
+// (column-name) -> binary-operator -> ((column-name -> binary-operator -> column-name) -> binary-operator -> column-name)
+// (column-name) -> binary-operator -> (literal-value)
+// (column-name) -> binary-operator -> (COLLATE -> collation-name)
+const createBaseExprParser = (resetTrigger: {new: number}) => {
+  const createParser = makeReusable(createSerialTokenParser, resetTrigger)
+  const parseBaseExpr = makeGroup([
+    createParser([tokenIs('literal')], ([v1]: any) => ({type: 'literal-value', v1})),
+    createParser([tokenIs('identifier'), tokenIs('punctuation', '.'), tokenIs('identifier')], ([v1,,v3]: any) => ({type: 'column-ref',v1, v3})),
+    createParser([tokenIs('identifier')], ([v1]: any) => ({type: 'column-ref', v1})),
+  ])
+  return parseBaseExpr
+}
+
+const createBinaryOperationParser = () => {
+  const resetTrigger = {new: 0}
+  const baseExprParser = createBaseExprParser(resetTrigger)
+  const binaryOperatorParser = makeReusable(createSerialTokenParser, resetTrigger)([
+    tokenIs('operator', '=')
+  ], ([v1]: any) => ({type:'binary-operator', v1}))
+
+  let left
+  return (t: Token) => {
+    const baseExprPartResult = baseExprParser(t)
+    if (baseExprPartResult.matched) {
+      left = baseExprPartResult.value
+      return baseExprPartResult
+    }
+    // not match. check if it is binary operator
+    const result = binaryOperatorParser(t)
+    if (result.matched) {
+      resetTrigger.new++ // reset the baseExprParser
+      return result
+    }
+    // return createBinaryOperationParser()
+
+  }
+}
+
+
 // result-column has three variants:
 // 1. expr [[as] column-alias]
 // 2. *
