@@ -89,10 +89,7 @@ const tokenIsExpr = (prev: Token) => (t: Token) => {
 }
 
 
-// const p = createRecursiveParser(
-//   [tokenIsExpr, tokenIs('keyword', 'COLLATE'), tokenIs('identifier')],
-//   // final
-// )
+
 export const makeReusable = (parserCreator: typeof createSerialTokenParser, trigger: { new: number }) => new Proxy(parserCreator, {
   apply(target, thisArg, args) {
     const create = () => Reflect.apply(target, thisArg, args)
@@ -109,33 +106,33 @@ export const makeReusable = (parserCreator: typeof createSerialTokenParser, trig
   }
 });
 
-const makeRepeatable = (
-  parserCreator: () => (t: Token) => { finished: boolean, value: unknown },
-  config: {
-    repeat: (t: Token) => boolean,
-    finish: (t: Token) => boolean
-  }
-) => {
-  let currentParser = parserCreator()
-  let result: {}[] = []
-  return (t: Token) => {
-    if (config.finish(t)) {
-      return { finished: true, value: result }
-    }
-    if (config.repeat(t)) {
-      currentParser = parserCreator()
-    }
-    const temp = currentParser(t)
-    if (temp.finished) {
-      if (temp.value === false) { // parse failed
-        return temp
-      }
-      result.push(temp.value as {})
-    }
+// const makeRepeatable = (
+//   parserCreator: () => (t: Token) => { finished: boolean, value: unknown },
+//   config: {
+//     repeat: (t: Token) => boolean,
+//     finish: (t: Token) => boolean
+//   }
+// ) => {
+//   let currentParser = parserCreator()
+//   let result: {}[] = []
+//   return (t: Token) => {
+//     if (config.finish(t)) {
+//       return { finished: true, value: result }
+//     }
+//     if (config.repeat(t)) {
+//       currentParser = parserCreator()
+//     }
+//     const temp = currentParser(t)
+//     if (temp.finished) {
+//       if (temp.value === false) { // parse failed
+//         return temp
+//       }
+//       result.push(temp.value as {})
+//     }
 
-    return { finished: false, value: undefined }
-  }
-}
+//     return { finished: false, value: undefined }
+//   }
+// }
 
 export const makeGroup = (parsers: Array<SerialTokenParser>) => {
   return (t: Token) => {
@@ -191,28 +188,58 @@ const createBaseExprParser = (resetTrigger: {new: number}) => {
   return parseBaseExpr
 }
 
-const createBinaryOperationParser = () => {
+export const createBinaryOperationParser = () => {
   const resetTrigger = {new: 0}
   const baseExprParser = createBaseExprParser(resetTrigger)
   const binaryOperatorParser = makeReusable(createSerialTokenParser, resetTrigger)([
     tokenIs('operator', '=')
   ], ([v1]: any) => ({type:'binary-operator', v1}))
 
-  let left
   return (t: Token) => {
     const baseExprPartResult = baseExprParser(t)
     if (baseExprPartResult.matched) {
-      left = baseExprPartResult.value
       return baseExprPartResult
     }
     // not match. check if it is binary operator
     const result = binaryOperatorParser(t)
     if (result.matched) {
       resetTrigger.new++ // reset the baseExprParser
-      return result
     }
-    // return createBinaryOperationParser()
+    return result
+  }
+}
 
+const createRecursiveParser = (criteria: Array<(t: Token) => {result: string | boolean, finished: boolean}>, final: Function) => {
+  const parser = []
+  let ptr=0
+  let lastFinished = false
+  return (t: Token) => {
+    if (lastFinished) {
+      ptr++
+      return createRecursiveParser(criteria.slice(ptr), final)(t)
+    }
+    const currentParser = criteria[ptr]
+    ptr++
+    const res = currentParser(t)
+    if (res.finished) {
+      lastFinished = true
+    }
+    return res
+  }
+}
+
+
+const createExprParser = () => {
+  const parseExpr = makeGroup([
+    createSerialTokenParser([tokenIs('literal') ], () => ({})),
+    createSerialTokenParser([tokenIs('identifier') ], () => ({})),
+    createSerialTokenParser([tokenIs('identifier'),tokenIs('punctuation', '.'),tokenIs('identifier') ], () => ({})),
+    createSerialTokenParser([tokenIs('paren', '('), createExprParser(), tokenIs('paren', ')') ], () => ({})),
+  ])
+
+  const parser = {current: parseExpr}
+  return (t: Token) => {
+    const res = parseExpr(t)
   }
 }
 
