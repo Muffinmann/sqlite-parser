@@ -80,12 +80,12 @@ export const createSerialTokenParser = (
 
 const tokenIsExpr = (prev: Token) => (t: Token) => {
   if (tokenIs('literal')(t)) {
-    return {matched: true, value: t.value}
+    return { matched: true, value: t.value }
   }
   if (tokenIs('operator', '=')) {
 
   }
-  return tokenIsExpr(t) 
+  return tokenIsExpr(t)
 }
 
 
@@ -170,6 +170,60 @@ export const makeGroup = (parsers: Array<SerialTokenParser>) => {
 //   }
 // }
 
+export const makeGroupV2 = (parsers: Array<SeriesTokenParser>) => {
+  let availableParsers = [...parsers]
+  return (t: Token) => {
+    let successResult
+    let matchCount = 0
+    let finishCount = 0
+    let matchFailed = []
+    for (let i = 0; i < availableParsers.length; ++i) {
+      const parser = availableParsers[i]
+      const currentResult = parser(t)
+
+      if (currentResult.finished) {
+        finishCount++
+      }
+      if (currentResult.matched) {
+        matchCount++
+        // if (currentResult.finished && successResult === undefined) {
+        successResult = currentResult
+        // }
+      } else {
+        matchFailed.push(i)
+      }
+    }
+    availableParsers = availableParsers.filter((_, index) => matchFailed.includes(index))
+    // console.log({ t, successResult, matchCount, finishCount })
+    // consider a group of 2 parsers, after evaluate each parser, there are several possible cases
+    // 1. one is matched and finished while:
+    // 1.1 the other is not matched but finished (parser finishes as soon as it is not matched)
+    // 1.2 the other is matched but not finished
+    // 1.3 the other is matched and finished 
+
+    if (successResult) {
+      return {
+        ...successResult,
+        finished: finishCount === availableParsers.length
+      }
+      // return successResult
+    }
+
+    // if (matchCount > 0) {
+    //   return {
+    //     matched: true,
+    //     finished: false,
+    //     value: undefined,
+    //   }
+    // }
+
+    return {
+      matched: false, finished: true, value: undefined
+    }
+
+  }
+}
+
 // -> literal-value ->
 // -> column-name ->
 // -> table-name -> . -> column-name ->
@@ -178,69 +232,147 @@ export const makeGroup = (parsers: Array<SerialTokenParser>) => {
 // (column-name) -> binary-operator -> ((column-name -> binary-operator -> column-name) -> binary-operator -> column-name)
 // (column-name) -> binary-operator -> (literal-value)
 // (column-name) -> binary-operator -> (COLLATE -> collation-name)
-const createBaseExprParser = (resetTrigger: {new: number}) => {
-  const createParser = makeReusable(createSerialTokenParser, resetTrigger)
-  const parseBaseExpr = makeGroup([
-    createParser([tokenIs('literal')], ([v1]: any) => ({type: 'literal-value', v1})),
-    createParser([tokenIs('identifier'), tokenIs('punctuation', '.'), tokenIs('identifier')], ([v1,,v3]: any) => ({type: 'column-ref',v1, v3})),
-    createParser([tokenIs('identifier')], ([v1]: any) => ({type: 'column-ref', v1})),
-  ])
-  return parseBaseExpr
-}
+// const createBaseExprParser = (resetTrigger: { new: number }) => {
+//   const createParser = makeReusable(createSerialTokenParser, resetTrigger)
+//   const parseBaseExpr = makeGroup([
+//     createParser([tokenIs('literal')], ([v1]: any) => ({ type: 'literal-value', v1 })),
+//     createParser([tokenIs('identifier'), tokenIs('punctuation', '.'), tokenIs('identifier')], ([v1, , v3]: any) => ({ type: 'column-ref', v1, v3 })),
+//     createParser([tokenIs('identifier')], ([v1]: any) => ({ type: 'column-ref', v1 })),
+//   ])
+//   return parseBaseExpr
+// }
 
-export const createBinaryOperationParser = () => {
-  const resetTrigger = {new: 0}
-  const baseExprParser = createBaseExprParser(resetTrigger)
-  const binaryOperatorParser = makeReusable(createSerialTokenParser, resetTrigger)([
-    tokenIs('operator', '=')
-  ], ([v1]: any) => ({type:'binary-operator', v1}))
+// export const createBinaryOperationParser = () => {
+//   const resetTrigger = { new: 0 }
+//   const baseExprParser = createBaseExprParser(resetTrigger)
+//   const binaryOperatorParser = makeReusable(createSerialTokenParser, resetTrigger)([
+//     tokenIs('operator', '=')
+//   ], ([v1]: any) => ({ type: 'binary-operator', v1 }))
 
-  return (t: Token) => {
-    const baseExprPartResult = baseExprParser(t)
-    if (baseExprPartResult.matched) {
-      return baseExprPartResult
+//   return (t: Token) => {
+//     const baseExprPartResult = baseExprParser(t)
+//     if (baseExprPartResult.matched) {
+//       return baseExprPartResult
+//     }
+//     // not match. check if it is binary operator
+//     const result = binaryOperatorParser(t)
+//     if (result.matched) {
+//       resetTrigger.new++ // reset the baseExprParser
+//     }
+//     return result
+//   }
+// }
+type SeriesTokenParser = (t: Token) => { value: string | boolean | undefined, matched: boolean, finished: boolean }
+const createSeriesParser = (criteria: Array<(t: Token) => { value: string | boolean | undefined, matched: boolean, finished: boolean }>, final: Function) => {
+  // const parser = []
+  let ptr = 0
+  // let lastFinished = false
+  // const parser = { current: parse }
+  let finalResult: unknown[] = []
+  let matchFailed = false
+  function parse(t: Token) {
+    if (ptr > criteria.length - 1 || matchFailed) {
+      // throw new Error("Pointer out of range")
+      return {
+        finished: true,
+        matched: false,
+        value: undefined
+      }
     }
-    // not match. check if it is binary operator
-    const result = binaryOperatorParser(t)
-    if (result.matched) {
-      resetTrigger.new++ // reset the baseExprParser
-    }
-    return result
-  }
-}
 
-const createRecursiveParser = (criteria: Array<(t: Token) => {result: string | boolean, finished: boolean}>, final: Function) => {
-  const parser = []
-  let ptr=0
-  let lastFinished = false
-  return (t: Token) => {
-    if (lastFinished) {
-      ptr++
-      return createRecursiveParser(criteria.slice(ptr), final)(t)
-    }
     const currentParser = criteria[ptr]
-    ptr++
+
     const res = currentParser(t)
-    if (res.finished) {
-      lastFinished = true
+    console.log({ ptr, t, res, finalResult })
+    if (res.matched) {
+      finalResult.push(res.value)
+    } else {
+      matchFailed = true
     }
+    if (res.finished) {
+      if (ptr === criteria.length - 1) {
+        final(finalResult)
+      }
+      ptr++
+    }
+
     return res
   }
+
+  return parse
 }
 
+const wrapFinished = (fn: (t: Token) => string | boolean) => {
+  return (t: Token) => ({
+    value: fn(t),
+    matched: Boolean(fn(t)),
+    finished: true
+  })
+}
 
-const createExprParser = () => {
-  const parseExpr = makeGroup([
-    createSerialTokenParser([tokenIs('literal') ], () => ({})),
-    createSerialTokenParser([tokenIs('identifier') ], () => ({})),
-    createSerialTokenParser([tokenIs('identifier'),tokenIs('punctuation', '.'),tokenIs('identifier') ], () => ({})),
-    createSerialTokenParser([tokenIs('paren', '('), createExprParser(), tokenIs('paren', ')') ], () => ({})),
+const createBaseExprParser = () => {
+  const p = makeGroupV2([
+    // createSeriesParser([wrapFinished(tokenIs('literal'))], () => ({})),
+    // createSeriesParser([wrapFinished(tokenIs('identifier'))], () => ({})),
+    createSeriesParser([wrapFinished(tokenIs('identifier')), wrapFinished(tokenIs('punctuation', '.')), wrapFinished(tokenIs('identifier'))], () => ({})),
+    createSeriesParser([wrapFinished(tokenIs('paren', '(')), createExprParser(), wrapFinished(tokenIs('paren', ')'))], () => ({})),
   ])
+  return p
+  // return (t: Token) => {
+  //   const res = p(t)
+  //   console.log('base expr parser', { t, res })
+  //   return res
+  // }
 
-  const parser = {current: parseExpr}
+}
+
+export const createExprParser = (p?: ReturnType<typeof makeGroupV2>) => {
+  // let parseBaseExpr: ReturnType<typeof makeGroupV2>
+  let parseExpr: ReturnType<typeof makeGroupV2> | undefined = p
+  let lastBaseResult: ReturnType<SeriesTokenParser>
   return (t: Token) => {
-    const res = parseExpr(t)
+    if (!parseExpr) {
+      parseExpr = makeGroupV2([
+        // createSeriesParser([wrapFinished(tokenIs('literal'))], () => ({})),
+        // createSeriesParser([wrapFinished(tokenIs('identifier'))], () => ({})),
+        createSeriesParser([wrapFinished(tokenIs('identifier')), wrapFinished(tokenIs('punctuation', '.')), wrapFinished(tokenIs('identifier'))], () => ({})),
+        createSeriesParser([createBaseExprParser(), wrapFinished(tokenIs('operator', '=')), createExprParser()], () => ({})),
+        createSeriesParser([wrapFinished(tokenIs('paren', '(')), createExprParser(), wrapFinished(tokenIs('paren', ')'))], () => ({})),
+
+      ])
+    }
+    return parseExpr(t)
+    // if (!parseBaseExpr) {
+    //   parseBaseExpr = makeGroupV2([
+    //     createSeriesParser([wrapFinished(tokenIs('literal'))], () => ({})),
+    //     createSeriesParser([wrapFinished(tokenIs('identifier'))], () => ({})),
+    //     createSeriesParser([wrapFinished(tokenIs('identifier')), wrapFinished(tokenIs('punctuation', '.')), wrapFinished(tokenIs('identifier'))], () => ({})),
+    //   ])
+    // }
+    // const baseResult = parseBaseExpr(t)
+    // if (baseResult.matched) {
+    //   lastBaseResult = baseResult
+    //   return baseResult
+    // }
+
+    // base not matched, check if it comes to the recursive part
+    // if (lastBaseResult) {
+
+    //   if (!parseExpr) {
+    //     parseExpr = makeGroupV2([
+    //       createSeriesParser([wrapFinished(tokenIs('operator', '=')), createExprParser()], () => ({})),
+    //       createSeriesParser([wrapFinished(tokenIs('paren', '(')), createExprParser(), wrapFinished(tokenIs('paren', ')'))], () => ({})),
+    //     ])
+    //   }
+
+    //   const exprResult = parseExpr(t)
+    //   console.log({
+    //     exprResult
+    //   })
+    //   return exprResult
   }
+
+
 }
 
 
