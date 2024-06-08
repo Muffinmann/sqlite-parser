@@ -9,7 +9,7 @@ interface TrieNode {
   children: Record<string, TrieNode>
 }
 const log: typeof console.log = (...args) => {
-  console.log(...args)
+  // console.log(...args)
 }
 
 class Matcher {
@@ -45,61 +45,56 @@ class Matcher {
     }
   }
 
-  recursiveMatch(t: Token): TrieNode {
-    try {
-      return this.match(t)
-    } catch (e) {
-      if ('root' in this.walkNode.children) {
-        const recursiveNode = this.walkNode.children.root
-        this.remaining.push(recursiveNode)
-        this.walkNode = this.tokenTrie
-        return this.recursiveMatch(t)
-      }
 
-      if (this.remaining.length) {
-        const key = this.makeTokenKey(t)
-        const lastRemaining = this.remaining.shift() as TrieNode
-        this.walkNode = lastRemaining
-        return this.recursiveMatch(t)
-      }
-      throw new Error(`Expecting: [${Object.keys(this.walkNode.children).toString()}], get: ${this.makeTokenKey(t)}`)
-    }
-  }
   match(t: Token): TrieNode {
     const key = this.makeTokenKey(t)
     if (key in this.walkNode.children) {
+      log('Match key: ', { t, available: Object.keys(this.walkNode.children) })
       const toNode = this.walkNode.children[key]
       this.path.push(t)
       this.walkNode = toNode
       return toNode
     }
     if (t.type in this.walkNode.children) {
+      log('Match type: ', { t, available: Object.keys(this.walkNode.children) })
       const toNode = this.walkNode.children[t.type]
       this.path.push(t)
       this.walkNode = toNode
       return toNode
     }
     if ('root' in this.walkNode.children) {
+      log('Match root: ', { t, available: Object.keys(this.walkNode.children) })
       const recursiveNode = this.walkNode.children.root
       this.remaining.push(recursiveNode)
       this.walkNode = this.tokenTrie
       return this.match(t)
     }
 
+
+    // when the first token in the token set is recursive
+    const existRecursiveStart = this.path.length && 'root' in this.tokenTrie.children
+    if (existRecursiveStart) {
+      const availableNodes = this.tokenTrie.children.root.children
+      if (key in availableNodes || t.type in availableNodes) {
+        log('Match recursive start: ', { t, available: Object.keys(this.walkNode.children) })
+        this.walkNode = this.tokenTrie.children.root
+        return this.match(t)
+      }
+    }
+
     if (this.remaining.length) {
-      const key = this.makeTokenKey(t)
+      log('Match remaining: ', { t, available: Object.keys(this.walkNode.children) })
       const lastRemaining = this.remaining.shift() as TrieNode
       this.walkNode = lastRemaining
       return this.match(t)
     }
-
     throw new Error(`Expecting: [${Object.keys(this.walkNode.children).toString()}], get`)
   }
   reset() {
     this.walkNode = this.tokenTrie
   }
 
-  makeTokenKey(t: Token) {
+  private makeTokenKey(t: Token) {
     return t.value ? t.type.concat('-', t.value) : t.type
   }
   get root() {
