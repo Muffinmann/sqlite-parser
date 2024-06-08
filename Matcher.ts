@@ -8,6 +8,13 @@ interface TrieNode {
   value: Token | null
   children: Record<string, TrieNode>
 }
+
+
+interface MatchResult {
+  finished: boolean,
+  value: Token[]
+}
+
 const log: typeof console.log = (...args) => {
   // console.log(...args)
 }
@@ -46,22 +53,26 @@ class Matcher {
   }
 
 
-  match(t: Token): TrieNode {
+  match(t: Token): MatchResult {
     const key = this.makeTokenKey(t)
-    if (key in this.walkNode.children) {
+
+    if ((key in this.walkNode.children) || (t.type in this.walkNode.children)) {
       log('Match key: ', { t, available: Object.keys(this.walkNode.children) })
-      const toNode = this.walkNode.children[key]
+      const toNode = this.walkNode.children[key] || this.walkNode.children[t.type]
       this.path.push(t)
       this.walkNode = toNode
-      return toNode
+      if (Object.keys(this.walkNode.children).length === 0) {
+        return {
+          finished: true,
+          value: this.path
+        }
+      }
+      return {
+        finished: false,
+        value: this.path
+      }
     }
-    if (t.type in this.walkNode.children) {
-      log('Match type: ', { t, available: Object.keys(this.walkNode.children) })
-      const toNode = this.walkNode.children[t.type]
-      this.path.push(t)
-      this.walkNode = toNode
-      return toNode
-    }
+
     if ('root' in this.walkNode.children) {
       log('Match root: ', { t, available: Object.keys(this.walkNode.children) })
       const recursiveNode = this.walkNode.children.root
