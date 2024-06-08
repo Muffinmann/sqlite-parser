@@ -312,8 +312,8 @@ const wrapFinished = (fn: (t: Token) => string | boolean) => {
 
 const createBaseExprParser = () => {
   const p = makeGroupV2([
-    // createSeriesParser([wrapFinished(tokenIs('literal'))], () => ({})),
-    // createSeriesParser([wrapFinished(tokenIs('identifier'))], () => ({})),
+    createSeriesParser([wrapFinished(tokenIs('literal'))], () => ({})),
+    createSeriesParser([wrapFinished(tokenIs('identifier'))], () => ({})),
     createSeriesParser([wrapFinished(tokenIs('identifier')), wrapFinished(tokenIs('punctuation', '.')), wrapFinished(tokenIs('identifier'))], () => ({})),
     createSeriesParser([wrapFinished(tokenIs('paren', '(')), createExprParser(), wrapFinished(tokenIs('paren', ')'))], () => ({})),
   ])
@@ -333,15 +333,16 @@ export const createExprParser = (p?: ReturnType<typeof makeGroupV2>) => {
   return (t: Token) => {
     if (!parseExpr) {
       parseExpr = makeGroupV2([
-        // createSeriesParser([wrapFinished(tokenIs('literal'))], () => ({})),
-        // createSeriesParser([wrapFinished(tokenIs('identifier'))], () => ({})),
+        createSeriesParser([wrapFinished(tokenIs('literal'))], () => ({})),
+        createSeriesParser([wrapFinished(tokenIs('identifier'))], () => ({})),
         createSeriesParser([wrapFinished(tokenIs('identifier')), wrapFinished(tokenIs('punctuation', '.')), wrapFinished(tokenIs('identifier'))], () => ({})),
         createSeriesParser([createBaseExprParser(), wrapFinished(tokenIs('operator', '=')), createExprParser()], () => ({})),
         createSeriesParser([wrapFinished(tokenIs('paren', '(')), createExprParser(), wrapFinished(tokenIs('paren', ')'))], () => ({})),
-
       ])
     }
-    return parseExpr(t)
+    const res = parseExpr(t)
+    if (res) { }
+    return res
     // if (!parseBaseExpr) {
     //   parseBaseExpr = makeGroupV2([
     //     createSeriesParser([wrapFinished(tokenIs('literal'))], () => ({})),
