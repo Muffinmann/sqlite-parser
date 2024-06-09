@@ -1,4 +1,4 @@
-interface Token {
+export interface Token {
   type: string,
   value?: string,
 }
@@ -9,10 +9,14 @@ interface TrieNode {
   children: Record<string, TrieNode>
 }
 
+export interface MatcherMark {
+  matchKey: string,
+  value: Token
+}
 
 interface MatchResult {
   finished: boolean,
-  value: Token[]
+  value: MatcherMark | undefined
 }
 
 const log: typeof console.log = (...args) => {
@@ -22,7 +26,7 @@ const log: typeof console.log = (...args) => {
 class Matcher {
   tokenTrie: TrieNode = { key: 'root', value: null, children: {} }
   walkNode = this.tokenTrie
-  path: Token[] = []
+  path: TrieNode[] = []
   remaining: TrieNode[] = []
 
   constructor(tokenSets: Token[][]) {
@@ -56,20 +60,23 @@ class Matcher {
   match(t: Token): MatchResult {
     const key = this.makeTokenKey(t)
 
+    // in case no value is specified in the given token set, then only match the type
     if ((key in this.walkNode.children) || (t.type in this.walkNode.children)) {
       log('Match key: ', { t, available: Object.keys(this.walkNode.children) })
-      const toNode = this.walkNode.children[key] || this.walkNode.children[t.type]
-      this.path.push(t)
+      const nodeKey = key in this.walkNode.children ? key : t.type
+      const toNode = this.walkNode.children[nodeKey]
+      this.path.push(toNode)
       this.walkNode = toNode
+      const marker = { matchKey: nodeKey, value: t }
       if (Object.keys(this.walkNode.children).length === 0) {
         return {
           finished: true,
-          value: this.path
+          value: marker
         }
       }
       return {
         finished: false,
-        value: this.path
+        value: marker
       }
     }
 
@@ -99,7 +106,11 @@ class Matcher {
       this.walkNode = lastRemaining
       return this.match(t)
     }
-    throw new Error(`Expecting: [${Object.keys(this.walkNode.children).toString()}], get`)
+    // throw new Error(`Expecting: [${Object.keys(this.walkNode.children).toString()}], get`)
+    return {
+      finished: true,
+      value: undefined,
+    }
   }
   reset() {
     this.walkNode = this.tokenTrie
