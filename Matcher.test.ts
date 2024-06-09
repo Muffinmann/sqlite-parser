@@ -56,10 +56,16 @@ describe('Matcher', () => {
       { type: 'identifier', value: 'col1' },
       { type: 'paren', value: ')' },
     ]
+    // const testTokens = [
+    //   { type: 'literal', value: 'name1' },
+    //   { type: 'operator', value: '=' },
+    //   { type: 'literal', value: 'name2' },
+    // ]
     for (let i = 0; i < testTokens.length; ++i) {
       console.log('Matching', i + 1, '...')
       const res = m.match(testTokens[i])
-      console.log('res:', res)
+      expect(res.value).not.toBeUndefined()
+      // console.log('res:', res)
 
     }
   })
