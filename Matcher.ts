@@ -56,10 +56,30 @@ class Matcher {
     }
   }
 
+  getLastWalkable() {
+    for (let i = this.pathStack.length - 1; i>-1; --i) {
+      const entries = this.pathStack[i]
+      const last = entries[entries.length - 1]
+      if (last && Object.keys(last.children).length) {
+        return last
+      }
+    }
+  }
 
+
+  logState(title: string) {
+    log(
+      '------',title,'------', '\n',
+    "current walk node: ", this.walkNode.key, '\n',
+    "available children: ", Object.keys(this.walkNode.children), '\n',
+    "current path stack: ", this.pathStack.map((entry) => entry.map((e) => e?.key || e)), '\n',
+    // "raw path stack: ", JSON.stringify(this.pathStack, null, 2), '\n'
+    )
+  }
   match(t: Token): MatchResult {
     const key = this.makeTokenKey(t)
 
+    this.logState(`try to match key: ${key}`)
     // initialize an entry if there is not any
     if (this.pathStack.length === 0) {
       this.pathStack.push([])
@@ -67,38 +87,42 @@ class Matcher {
 
     // in case no value is specified in the given token set, then only match the type
     if ((key in this.walkNode.children) || (t.type in this.walkNode.children)) {
-      log('Match key: ', { t, available: Object.keys(this.walkNode.children) })
       const nodeKey = key in this.walkNode.children ? key : t.type
       const toNode = this.walkNode.children[nodeKey]
       this.walkNode = toNode
       this.updateCurrentPath(this.walkNode)
+      this.logState('key matched')
       const marker = { matchKey: nodeKey, value: t }
-      log('check available: ', Object.keys(this.walkNode.children))
-      if (Object.keys(this.walkNode.children).length === 0) {
-        log("before pop entry in path stack", this.pathStack.map((entry) => entry.map((e) => e.key)))
-        const finished = []
-        const p = this.pathStack.pop()
-        finished.unshift(p)
-        // exit any finished recursion
-        while (this.pathStack.length) {
-          const current = this.getCurrentPath()
-          const last = current[current.length - 1]
-          const first = current[0]
-          // TODO better strategy to pop the stack entry
-          // maybe set pointer this.walkNode back to last entry
-          if (last.key === 'root' && first.key === 'root') {
-            const lastP = this.pathStack.pop()
-            finished.unshift(lastP)
-          } else {
-            break
-          }
 
+      // if any recursion is active
+      if (this.pathStack.length > 1) {
+        const lastWalkable = this.getLastWalkable()
+        if (!lastWalkable) {
+          return {
+            finished: true,
+            value: marker
+          }
         }
-        log("left path stack", this.pathStack.map((entry) => entry.map((e) => e.key)))
-        return {
-          finished: true,
-          value: marker
+        
+        this.walkNode = lastWalkable
+        this.logState('update walk node to last walkable')
+
+        if(key in lastWalkable.children || t.type in lastWalkable.children) {
+          // clear stack until last walkable
+          let currentPath = this.getCurrentPath()
+          let currentLast = currentPath[currentPath.length - 1]
+          while(currentLast !== lastWalkable) {
+            this.pathStack.pop()
+            currentPath = this.getCurrentPath()
+            currentLast = currentPath[currentPath.length - 1]
+          }
+          // this.updateCurrentPath(toNode)
+          // this.walkNode = toNode
+          // log('Recursive mathching after stack pop...')
+          this.logState('After stack pop')
+          return this.match(t)
         }
+
       }
       return {
         finished: false,
@@ -106,34 +130,40 @@ class Matcher {
       }
     }
 
-    log('path stack: ', this.pathStack.map((entry) => entry.map((e) => e.key)))
     // when the first token in the token set is recursive (key is 'root'), skip it and check its direct descent children instead.
     // Otherwise it can cause an infinite recursion.
-    const p = this.getCurrentPath()
-    const existRecursiveStart = p.length === 0 && 'root' in this.tokenTrie.children
-    if (existRecursiveStart) {
+    const existRecursiveStart = 'root' in this.tokenTrie.children
+    const currentPath = this.getCurrentPath()
+    // a recursive node at the start only valid when the current path length in not zero.
+    if (existRecursiveStart && currentPath.length) {
       const availableNodes = this.tokenTrie.children.root.children
       if (key in availableNodes || t.type in availableNodes) {
-        log('Match recursive start: ', { t, available: Object.keys(this.walkNode.children) })
         this.walkNode = this.tokenTrie.children.root
-        p.push(this.tokenTrie.children.root)
+        this.logState('start recursive')
         return this.match(t)
       }
     }
 
     if ('root' in this.walkNode.children) {
-      log('Match root: ', {
-        t,
-        available: Object.keys(this.walkNode.children),
-        pathStack: this.pathStack
-      })
       this.updateCurrentPath(this.walkNode.children.root)
       // create a new path entry for the recursion
       this.pathStack.push([])
       this.walkNode = this.tokenTrie
+      this.logState('start recursive from ROOT')
       return this.match(t)
     }
 
+    // check other endings of a recursive node
+    if ('root' === this.walkNode.key) {
+      const otherAvailableNodes = this.tokenTrie.children.root.children
+      const tokenIsInOtherAvailableNodes = key in otherAvailableNodes || t.type in otherAvailableNodes
+      if (tokenIsInOtherAvailableNodes) {
+        this.pathStack.push([])
+        this.walkNode = this.tokenTrie.children.root
+        this.logState('start recursive from ORTHER root')
+        return this.match(t)
+      }
+    }
 
     return {
       finished: true,
