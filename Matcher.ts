@@ -61,10 +61,10 @@ class Matcher {
       const entries = this.pathStack[i]
       const last = entries[entries.length - 1]
       
-      log(
-        '---get last walkable---\n',
-        'entries: ', entries,'\n',
-        'last: ', last.key, '\n')
+      // log(
+      //   '---get last walkable---\n',
+      //   'entries: ', entries,'\n',
+      //   'last: ', last.key, '\n')
       if (last && Object.keys(last.children).length) {
         return last
       }
@@ -110,32 +110,80 @@ class Matcher {
 
       // if any recursion is active
       if (this.pathStack.length > 1) {
+        // try to squash stack
+        let bucket: TrieNode[] = []
+        for (let i = this.pathStack.length - 1; i > 0; --i) {
+          const currentStackEntry = this.pathStack[i]
+          const previousStackEntry = this.pathStack[i-1]
+
+          const currentEnd = currentStackEntry[currentStackEntry.length - 1]
+          const previousEnd = previousStackEntry[previousStackEntry.length - 1]
+
+          if (currentEnd && previousEnd && this.nodeIsLeaf(currentEnd) && this.nodeIsLeaf(previousEnd)) {
+            let l = currentStackEntry.length
+            while(l) {
+              bucket.unshift(currentStackEntry.pop()!)
+              l--
+            }
+            l = previousStackEntry.length
+            while(l) {
+              const temp = previousStackEntry.pop()
+              l--
+              if (temp && temp.key !== 'root') {
+                bucket.unshift(temp)
+              }
+            }
+            this.pathStack.pop()
+            this.pathStack.pop()
+            this.pathStack.push(bucket)
+            bucket = []
+          } else {
+            break
+          }
+
+        }
+
+        this.logState('after stack squash')
         const lastWalkable = this.getLastWalkable()
+
+
         if (!lastWalkable) {
           return {
             finished: true,
             value: marker
           }
         }
-        
+ 
+        if (lastWalkable.key === 'root') {
+          this.pathStack.push([])
+        }       
+
         this.walkNode = lastWalkable
         this.logState('update walk node to last walkable')
+        //
+        // const lastWalkable = this.getLastWalkable()
+        // if (!lastWalkable) {
+        //   return {
+        //     finished: true,
+        //     value: marker
+        //   }
+        // }
+        
+        // this.walkNode = lastWalkable
+        // this.logState('update walk node to last walkable')
 
-        if(key in lastWalkable.children || t.type in lastWalkable.children) {
-          // clear stack until last walkable
-          let currentPath = this.getCurrentPath()
-          let currentLast = currentPath[currentPath.length - 1]
-          while(currentLast !== lastWalkable) {
-            this.pathStack.pop()
-            currentPath = this.getCurrentPath()
-            currentLast = currentPath[currentPath.length - 1]
-          }
-          // this.updateCurrentPath(toNode)
-          // this.walkNode = toNode
-          // log('Recursive mathching after stack pop...')
-          this.logState('After stack pop')
-          return this.match(t)
-        }
+        // if(key in lastWalkable.children || t.type in lastWalkable.children) {
+        //   // clear stack until last walkable
+        //   let currentPath = this.getCurrentPath()
+        //   let currentLast = currentPath[currentPath.length - 1]
+        //   while(currentLast !== lastWalkable) {
+        //     this.pathStack.pop()
+        //     currentPath = this.getCurrentPath()
+        //     currentLast = currentPath[currentPath.length - 1]
+        //   }
+        //   this.logState('After stack pop')
+        //   return this.match(t)
+        // }
 
       }
       return {
