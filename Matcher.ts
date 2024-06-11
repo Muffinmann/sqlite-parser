@@ -61,10 +61,6 @@ class Matcher {
       const entries = this.pathStack[i]
       const last = entries[entries.length - 1]
       
-      // log(
-      //   '---get last walkable---\n',
-      //   'entries: ', entries,'\n',
-      //   'last: ', last.key, '\n')
       if (last && Object.keys(last.children).length) {
         return last
       }
@@ -78,7 +74,6 @@ class Matcher {
     "current walk node: ", this.walkNode.key, '\n',
     "available children: ", Object.keys(this.walkNode.children), '\n',
     "current path stack: ", this.pathStack.map((entry) => entry.map((e) => e?.key || e)), '\n',
-    // "raw path stack: ", JSON.stringify(this.pathStack, null, 2), '\n'
     )
   }
 
@@ -137,6 +132,18 @@ class Matcher {
             this.pathStack.pop()
             this.pathStack.push(bucket)
             bucket = []
+          } else if (currentEnd && previousEnd && this.nodeIsLeaf(currentEnd) && (currentEnd.key in previousEnd.children)) {
+            let l = currentStackEntry.length
+            while(l) {
+              bucket.unshift(currentStackEntry.pop()!)
+              l--
+            }
+
+            previousStackEntry.pop()!
+            previousStackEntry.push(...bucket)
+            this.pathStack.pop()
+            bucket = []
+
           } else {
             break
           }
@@ -154,36 +161,10 @@ class Matcher {
           }
         }
  
-        if (lastWalkable.key === 'root') {
-          this.pathStack.push([])
-        }       
 
         this.walkNode = lastWalkable
         this.logState('update walk node to last walkable')
-        //
-        // const lastWalkable = this.getLastWalkable()
-        // if (!lastWalkable) {
-        //   return {
-        //     finished: true,
-        //     value: marker
-        //   }
-        // }
-        
-        // this.walkNode = lastWalkable
-        // this.logState('update walk node to last walkable')
-
-        // if(key in lastWalkable.children || t.type in lastWalkable.children) {
-        //   // clear stack until last walkable
-        //   let currentPath = this.getCurrentPath()
-        //   let currentLast = currentPath[currentPath.length - 1]
-        //   while(currentLast !== lastWalkable) {
-        //     this.pathStack.pop()
-        //     currentPath = this.getCurrentPath()
-        //     currentLast = currentPath[currentPath.length - 1]
-        //   }
-        //   this.logState('After stack pop')
-        //   return this.match(t)
-        // }
+       
 
       }
       return {

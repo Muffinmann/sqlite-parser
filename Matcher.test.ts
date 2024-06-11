@@ -53,7 +53,8 @@ describe('Matcher', () => {
       { type: 'paren', value: ')' },
       { type: 'operator', value: '=' },
       { type: 'paren', value: '(' },
-      { type: 'identifier', value: 'col1' },
+      { type: 'identifier', value: 'column1' },
+      { type: 'identifier', value: 'c1' },
       { type: 'paren', value: ')' },
     ]
     // const testTokens = [
